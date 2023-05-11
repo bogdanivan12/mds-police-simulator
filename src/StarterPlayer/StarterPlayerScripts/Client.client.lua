@@ -1,11 +1,12 @@
 
-local Client = _G;                                      -- Global table https://create.roblox.com/docs/reference/engine/globals/LuaGlobals#_G
-Client.Player = game.Players.LocalPlayer;               -- Player Object
-Client.Camera = game.Workspace.CurrentCamera;           -- Camera
-Client.Mouse = Client.Player:GetMouse();                -- Mouse
-Client.UI = game.StarterGui:WaitForChild('UI');         -- Interface
-Client.UI.Parent = Client.Player.PlayerGui;                 -- Reparenting, Players.CharacterAutoloads = false, UI won't load by itself
-Client.API = {};                                        -- Container of function overloads
+local Client = _G;                                              -- Global table https://create.roblox.com/docs/reference/engine/globals/LuaGlobals#_G
+Client.Player = game.Players.LocalPlayer;                       -- Player Object
+Client.Camera = game.Workspace.CurrentCamera;                   -- Camera
+Client.Mouse = Client.Player:GetMouse();                        -- Mouse
+Client.Assets = game.ReplicatedStorage:WaitForChild('Assets');  -- Game assets
+Client.UI = Client.Assets:WaitForChild('UI');                   -- Interface
+Client.UI.Parent = Client.Player.PlayerGui;                         -- Reparenting, Players.CharacterAutoloads = false, UI won't load by itself
+Client.API = {};                                                -- Container of function overloads
 
 local loadOrder = { -- Loading each module one by one
     'UIAPI',        -- Must be first    UI Controller
@@ -15,6 +16,7 @@ local loadOrder = { -- Loading each module one by one
 }
 
 function StartUp()  -- int main()
+    Client.Assets.Parent = game.Workspace;
     local moduleList = script.Parent:WaitForChild('Modules'):GetChildren();
     for i,v in pairs(loadOrder) do  -- Loading Module X and letting it overload functions in API[X]. Helpful for code scaling
         local module = script.Parent.Modules:FindFirstChild(v);

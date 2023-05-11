@@ -21,7 +21,7 @@ function SetupAPIs()
         local rotSpeed = 10;    -- Degrees/Second
         local zDist = 40;       -- Studs
         local scene = APIs.CameraAPI.CreateScene(function(t)
-            return game.Workspace.IntroScene.CameraOffset.CFrame
+            return Client.Assets.Scenes.IntroScene.CameraOffset.CFrame
                         * CFrame.Angles(0, math.rad(rotSpeed) * t, 0)
                         * CFrame.Angles(math.rad(-15), 0, 0)
                         * CFrame.new(0, 5, zDist);
@@ -50,7 +50,7 @@ function SetupAPIs()
 
         local physicsDestructor;
         local spawnerConnections = {};
-        local laneModels = game.Workspace.Gameplay.Spawner:GetChildren();
+        local laneModels = Client.Assets.Scenes.Gameplay.Spawner:GetChildren();
         local carsDataset = {};
         local destroyCar = function(carIndex)
             local data = carsDataset[carIndex];     -- Get data at index carIndex
@@ -127,12 +127,12 @@ function SetupAPIs()
         local zoomValue = 1;
         local zoomSensitivity = 0.3;
         local scene = APIs.CameraAPI.CreateScene(function(t)
-            local cf = game.Workspace.Gameplay.CameraOffset.CFrame
+            local cf = Client.Assets.Scenes.Gameplay.CameraOffset.CFrame
                         * CFrame.Angles(0, math.rad(currentAngles.Y), 0)
                         * CFrame.Angles(math.rad(currentAngles.X), 0, 0)
             
             local raycastParams = RaycastParams.new();
-            raycastParams.FilterDescendantsInstances = {game.Workspace.Gameplay.CameraOffset};
+            raycastParams.FilterDescendantsInstances = {Client.Assets.Scenes.Gameplay.CameraOffset};
             raycastParams.FilterType = Enum.RaycastFilterType.Exclude;
             raycastParams.IgnoreWater = true;
             local raycastDistance = 10000;

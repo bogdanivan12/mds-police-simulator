@@ -8,7 +8,7 @@ local Storage = {
 
 function SetupAPIs()
     CurrentAPI.CreateCar = function()   -- Creates a random car from the asset pack and recolors it
-        local assets = game.ReplicatedStorage.Assets.Cars:GetChildren();
+        local assets = Client.Assets.Cars:GetChildren();
         local car = assets[math.random(1, #assets)]:Clone();
         local color = BrickColor.random();
         for i,v in pairs(car:GetDescendants()) do
