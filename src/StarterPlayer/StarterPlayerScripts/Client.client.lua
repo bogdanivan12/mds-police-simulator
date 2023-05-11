@@ -10,6 +10,7 @@ Client.API = {};                                        -- Container of function
 local loadOrder = { -- Loading each module one by one
     'UIAPI',        -- Must be first    UI Controller
     'CameraAPI',    -- Unknown          Camera Controller
+    'CarAPI',       -- Unknow           Car Controller, generates car models on command
     'GameplayAPI'   -- Should be last   Gameplay Controller (Starts the game)
 }
 
