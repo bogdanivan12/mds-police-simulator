@@ -5,15 +5,38 @@ local APIs = Client.API;
 local CurrentAPI = APIs[API_NAME];
 local Storage = {
     CurrentDestructor = nil;
+    CarsDataset = {};
 };
 
+-- Storage.CarsDataset[index] = {
+--     Model = carModel;               -- Car Model
+--     Lane = rootModel;
+--     MoveVector = moveVec;           -- Unit Direction vector (where it moves to)
+--     Speed = speed;                  -- Speed (studs/second)
+--     Distance = distance;            -- Distance (studs)
+--     FinishTime = timeTillFinish;    -- Future time when simulation will finish (seconds, high-precision)
+
+--     _simulation = connection;       -- RBXScriptConnection to Heartbeat event. Used to simulate car moving forward
+-- }
+
 function SetupAPIs()
+
+    CurrentAPI.GetCarDataByModel = function(model)
+        for i, v in pairs(Storage.CarsDataset) do
+            if v.Model == model then
+                return v;
+            end
+        end
+        warn("No CarData found for " .. model:GetFullName());
+    end
+
     CurrentAPI.DestroyCurrentGameplay = function()
         if Storage.CurrentDestructor then
             Storage.CurrentDestructor();
             Storage.CurrentDestructor = nil;
         end
     end
+
     CurrentAPI.GoToIntro = function()
         CurrentAPI.DestroyCurrentGameplay();
         APIs.UIAPI.GetUI('IntroFrame').Visible = true;
@@ -51,12 +74,11 @@ function SetupAPIs()
         local physicsDestructor;
         local spawnerConnections = {};
         local laneModels = Client.Assets.Scenes.Gameplay.Spawner:GetChildren();
-        local carsDataset = {};
         local destroyCar = function(carIndex)
-            local data = carsDataset[carIndex];     -- Get data at index carIndex
+            local data = Storage.CarsDataset[carIndex];     -- Get data at index carIndex
             data._simulation:Disconnect();          -- Disconnect event
             data.Model:Destroy();                   -- :Destroy() is necessary, memory leaks can occur without it
-            carsDataset[carIndex] = nil;            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
+            Storage.CarsDataset[carIndex] = nil;            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
         end
         local spawnCar = function(rootModel, speed, interact)       -- Spawns car given a Model (Model has StartPosition and EndPosition), Speed, and Interact
             interact = interact or false;                           -- Ternary to defaul to false (Value means if user can interact with this car)
@@ -67,7 +89,7 @@ function SetupAPIs()
             local distance = (rootModel.EndSpawn.Position - rootModel.StartSpawn.Position).Magnitude;
             local timeTillFinish = os.clock() + (distance / speed);
 
-            local index = #carsDataset + 1; -- Used to store at index
+            local index = #Storage.CarsDataset + 1; -- Used to store at index
             local connection = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
                 carModel:PivotTo(carModel.PrimaryPart.CFrame*CFrame.new(carModel.PrimaryPart.CFrame:VectorToObjectSpace(moveVec) * deltaTime * speed));
                 if timeTillFinish <= os.clock() then
@@ -75,7 +97,7 @@ function SetupAPIs()
                 end
             end)
 
-            carsDataset[index] = {
+            Storage.CarsDataset[index] = {
                 Model = carModel;               -- Car Model
                 Lane = rootModel;
                 MoveVector = moveVec;           -- Unit Direction vector (where it moves to)
@@ -85,6 +107,7 @@ function SetupAPIs()
 
                 _simulation = connection;       -- RBXScriptConnection to Heartbeat event. Used to simulate car moving forward
             }
+
             return index;
         end
         
@@ -95,7 +118,7 @@ function SetupAPIs()
             spawnerConnections[laneIndex] = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
                 local timeNeeded = distance / newSpeed;
                 local availableTime = -1;           -- math.huge = inf (https://create.roblox.com/docs/reference/engine/libraries/math)
-                for i,v in pairs(carsDataset) do    -- Iterate through carsDataset and check if we can insert car with speed newSpeed without collissions
+                for i,v in pairs(Storage.CarsDataset) do    -- Iterate through carsDataset and check if we can insert car with speed newSpeed without collissions
                     if v.Lane ~= laneObject then continue; end  -- If not on the same lane, continue
                     
                     availableTime = math.max(availableTime, v.FinishTime - os.clock());
@@ -111,7 +134,7 @@ function SetupAPIs()
             for i,v in pairs(spawnerConnections) do
                 v:Disconnect();
             end
-            for i,v in pairs(carsDataset) do
+            for i,v in pairs(Storage.CarsDataset) do
                 destroyCar(i);
             end
         end
@@ -141,7 +164,7 @@ function SetupAPIs()
             speedUI.Text = '0 km/h';
             if raycastResult then
                 raycastDistance = (cf.Position - raycastResult.Position).Magnitude;
-                for i,v in pairs(carsDataset) do
+                for i,v in pairs(Storage.CarsDataset) do
                     if raycastResult.Instance:IsDescendantOf(v.Model) then
                         speedUI.Text = tostring(math.floor(v.Speed)) ..' km/h';
                         break;
@@ -192,7 +215,39 @@ function SetupAPIs()
             uis.MouseIconEnabled = true;
         end
     end
+
+    CurrentAPI.GoToInterogation = function()
+        CurrentAPI.DestroyCurrentGameplay();
+        APIs.UIAPI.GetUI('Interogation').Visible = true;
+
+        local rotSpeed = 10;    -- Degrees/Second
+        local zDist = 40;       -- Studs
+        local scene = APIs.CameraAPI.CreateScene(function(t)
+            local cameraOffset = Client.Assets.Scenes.IntroScene.CameraOffset.CFrame
+            local rotation = CFrame.Angles(0, math.rad(rotSpeed * t), 0) -- Rotate around the Y-axis
+
+            -- Apply rotations and translation to the camera offset
+            local newCFrame = cameraOffset * rotation * CFrame.Angles(math.rad(-60), 0, 0) 
+                                                      * CFrame.new(0, 5, zDist);
+
+            return newCFrame
+        end)
+        APIs.CameraAPI.SetDepthOfField(zDist);
+
+        local buttonConnection = APIs.UIAPI.GetUI('InterogationButtons').Play.Activated:Connect(function()
+            CurrentAPI.GoToGameplay();
+        end)
+
+        Storage.CurrentDestructor = function()
+            APIs.UIAPI.GetUI('Interogation').Visible = false;
+            buttonConnection:Disconnect();
+            scene:Destroy();
+        end
+    end
+
 end
+
+
 
 function StartGame()
     Client.Camera.CameraType = Enum.CameraType.Scriptable;  -- Disables Roblox camera controller

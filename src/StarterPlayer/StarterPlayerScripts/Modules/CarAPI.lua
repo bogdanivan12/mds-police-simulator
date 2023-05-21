@@ -16,6 +16,23 @@ function SetupAPIs()
                 v.Parent.BrickColor = color;
             end
         end
+
+        -- Add click event handler to the car
+        car.ClickDetector.MouseClick:Connect(function(player)
+            local carDataset = APIs.GameplayAPI.GetCarDataByModel(car);
+            if carDataset ~= nil then
+                local speed = carDataset.Speed;
+                if speed > 90 then
+                    print("car speeding\n");
+                    local CameraAPI = APIs.CameraAPI;
+                    APIs.GameplayAPI.GoToInterogation();
+                end
+            else
+                warn("CarData is null upon clickDetectorEvent!");
+            end
+            
+        end)
+
         return car;
     end
 end
