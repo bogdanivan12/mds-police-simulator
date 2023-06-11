@@ -125,6 +125,7 @@ function SetupAPIs()
 
         local zoomLimit = 5;
         local zoomValue = 1;
+        local clickcallback = function() end
         local zoomSensitivity = 0.3;
         local scene = APIs.CameraAPI.CreateScene(function(t)
             local cf = Client.Assets.Scenes.Gameplay.CameraOffset.CFrame
@@ -139,11 +140,23 @@ function SetupAPIs()
             local raycastResult = workspace:Raycast(cf.Position, cf.LookVector*raycastDistance);  -- https://create.roblox.com/docs/mechanics/raycasting
 
             speedUI.Text = '0 km/h';
+            clickcallback = function() end  -- Overwrite the clickcallback function to static act
             if raycastResult then
                 raycastDistance = (cf.Position - raycastResult.Position).Magnitude;
                 for i,v in pairs(carsDataset) do
                     if raycastResult.Instance:IsDescendantOf(v.Model) then
-                        speedUI.Text = tostring(math.floor(v.Speed)) ..' km/h';
+                        speedUI.Text = tostring(math.floor(v.Speed)) ..' km/h'; -- Adapt UI to the current speed
+
+                        clickcallback = function()  -- Overwrite the clickcallback function to act
+                            local x = math.random();
+                            if x < 0.1 then
+                                print('Chase Mechanic')
+                                CurrentAPI.GoToChase();
+                            else
+                                print('Interrogation Mechanic')
+                                --CurrentAPI.GoToInterrogation();
+                            end
+                        end
                         break;
                     end
                 end
@@ -175,6 +188,8 @@ function SetupAPIs()
                 if input.KeyCode == Enum.KeyCode.Q then
                     CurrentAPI.GoToIntro();
                 end
+            elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+                clickcallback()
             end
         end)
         -- CAMERA CONTROLS AND LIMITS
@@ -191,6 +206,15 @@ function SetupAPIs()
             uis.MouseBehavior = Enum.MouseBehavior.Default;
             uis.MouseIconEnabled = true;
         end
+    end
+
+    CurrentAPI.GoToInterrogation = function()
+        CurrentAPI.DestroyCurrentGameplay();
+
+    end
+    CurrentAPI.GoToChase = function()
+        CurrentAPI.DestroyCurrentGameplay();
+
     end
 end
 
