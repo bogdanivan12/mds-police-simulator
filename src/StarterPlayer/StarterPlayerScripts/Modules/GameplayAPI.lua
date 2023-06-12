@@ -7,6 +7,7 @@ local CurrentAPI = APIs[API_NAME];
 local Storage = {
     CurrentDestructor = nil;
 
+    SpeedLimit = 100;
     ChaseOrigin = Client.Assets.Scenes.Chase.Road.PrimaryPart.CFrame;
 };
 
@@ -73,10 +74,10 @@ function SetupAPIs()
         local laneModels = Client.Assets.Scenes.Gameplay.Spawner:GetChildren();
         local carsDataset = {};
         local destroyCar = function(carIndex)
-            local data = carsDataset[carIndex];     -- Get data at index carIndex
-            data._simulation:Disconnect();          -- Disconnect event
-            data.Model:Destroy();                   -- :Destroy() is necessary, memory leaks can occur without it
-            carsDataset[carIndex] = nil;            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
+            local data = carsDataset[carIndex];                                                     -- Get data at index carIndex
+            if data._simulation then data._simulation:Disconnect(); data._simulation = nil end      -- Disconnect event
+            data.Model:Destroy();                                                                   -- :Destroy() is necessary, memory leaks can occur without it
+            carsDataset[carIndex] = nil;                                                            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
         end
         local spawnCar = function(rootModel, speed, interact)       -- Spawns car given a Model (Model has StartPosition and EndPosition), Speed, and Interact
             interact = interact or false;                           -- Ternary to defaul to false (Value means if user can interact with this car)
@@ -130,6 +131,10 @@ function SetupAPIs()
         physicsDestructor = function()
             for i,v in pairs(spawnerConnections) do
                 v:Disconnect();
+            end
+            for i,v in pairs(carsDataset) do
+                v._simulation:Disconnect();
+                v._simulation = nil;
             end
             physicsDestructor = nil;
         end
