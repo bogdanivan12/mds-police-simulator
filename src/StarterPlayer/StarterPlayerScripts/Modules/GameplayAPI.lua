@@ -396,6 +396,12 @@ function SetupAPIs()
 
             ground:PivotTo(ground.PrimaryPart.CFrame*CFrame.new(0, 0, speed*deltaTime))
             if tick() > finishTime then
+                physicsEmulator:Disconnect();
+                physicsEmulator = nil;
+                
+                APIs.CameraAPI.SetSaturation(-1);
+                APIs.CameraAPI.SetBrightness(-1, 3);
+                task.wait(3);
                 CurrentAPI.GoToGameplay();
             end
 
@@ -425,6 +431,7 @@ function SetupAPIs()
         Storage.CurrentDestructor = function()
             APIs.CameraAPI.SetFOV(70, 0);
 
+            ground:PivotTo(Storage.ChaseOrigin)
             ground = Storage.ChaseOrigin;
             physicsDestructor();
             scene:Destroy();
