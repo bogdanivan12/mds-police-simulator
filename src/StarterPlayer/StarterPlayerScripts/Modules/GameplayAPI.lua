@@ -5,6 +5,8 @@ local APIs = Client.API;
 local CurrentAPI = APIs[API_NAME];
 local Storage = {
     CurrentDestructor = nil;
+
+    ChaseOrigin = Client.Assets.Scenes.Chase.Road.PrimaryPart.CFrame;
 };
 
 function SetupAPIs()
@@ -214,7 +216,62 @@ function SetupAPIs()
     end
     CurrentAPI.GoToChase = function()
         CurrentAPI.DestroyCurrentGameplay();
+        
+        local scene = APIs.CameraAPI.CreateScene(function(t)
+            return Client.Assets.Scenes.Chase.PoliceCar.CameraOffset.CFrame;
+        end)
 
+        local carsDataset = {};
+        local destroyCar = function()
+            local data = carsDataset[carIndex];     -- Get data at index carIndex
+            if data._simulation then
+                data._simulation:Disconnect();          -- Disconnect event
+            end
+            data.Model:Destroy();                   -- :Destroy() is necessary, memory leaks can occur without it
+            carsDataset[carIndex] = nil;            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
+        end
+        local spawnCar = function(rootModel, speed)
+            speed = speed or 0;
+
+            local carModel = APIs.CarAPI.CreateCar();
+            carModel.Parent = rootModel;
+            carModel:PivotTo(rootModel.StartSpawn.CFrame);          -- Sets position and orientation of Car to StartSpawns CFrame
+            local moveVec = (rootModel.EndSpawn.Position - rootModel.StartSpawn.Position).Unit; -- Creates a Unit vector representing the direction
+            local distance = (rootModel.EndSpawn.Position - rootModel.StartSpawn.Position).Magnitude;
+
+            local index = #carsDataset + 1; -- Used to store at index
+            local connection;
+            if speed > 0 then
+                connection = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
+                    carModel:PivotTo(carModel.PrimaryPart.CFrame*CFrame.new(carModel.PrimaryPart.CFrame:VectorToObjectSpace(moveVec) * deltaTime * speed));
+                end)
+            end
+
+            carsDataset[index] = {
+                Model = carModel;               -- Car Model
+                Lane = rootModel;
+                MoveVector = moveVec;           -- Unit Direction vector (where it moves to)
+                Speed = speed;                  -- Speed (studs/second)
+                Distance = distance;            -- Distance (studs)
+
+                _simulation = connection;       -- RBXScriptConnection to Heartbeat event. Used to simulate car moving forward
+            }
+            return index;
+        end
+
+        local physicsEmulator = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
+            
+        end)
+        local physicsDestructor = function()
+            physicsEmulator:Disconnect();
+        end
+
+        Storage.CurrentDestructor = function()
+            APIs.CameraAPI.SetFOV(70, 0);
+
+            physicsDestructor();
+            scene:Destroy();
+        end
     end
 end
 
