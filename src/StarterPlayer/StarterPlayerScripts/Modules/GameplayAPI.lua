@@ -1,3 +1,4 @@
+local UserInputService = game:GetService('UserInputService')
 local API_NAME = script.Name;
 
 local Client = _G;
@@ -18,6 +19,10 @@ function SetupAPIs()
     end
     CurrentAPI.GoToIntro = function()
         CurrentAPI.DestroyCurrentGameplay();
+
+        
+        APIs.CameraAPI.SetSaturation(0, 0);
+        APIs.CameraAPI.SetBrightness(0, 3);
         APIs.UIAPI.GetUI('IntroFrame').Visible = true;
 
         local rotSpeed = 10;    -- Degrees/Second
@@ -30,13 +35,21 @@ function SetupAPIs()
         end)
         APIs.CameraAPI.SetDepthOfField(zDist);
 
-        local buttonConnection = APIs.UIAPI.GetUI('IntroButtons').Play.Activated:Connect(function()
+        local buttonConnection;
+        buttonConnection = APIs.UIAPI.GetUI('IntroButtons').Play.Activated:Connect(function()
+            buttonConnection:Disconnect(); buttonConnection = nil;
+
+            APIs.CameraAPI.SetSaturation(-1, 3);
+            APIs.CameraAPI.SetBrightness(-1, 3);
+            task.wait(3);
             CurrentAPI.GoToGameplay();
         end)
 
         Storage.CurrentDestructor = function()
             APIs.UIAPI.GetUI('IntroFrame').Visible = false;
-            buttonConnection:Disconnect();
+            if buttonConnection then
+                buttonConnection:Disconnect();
+            end
 
             scene:Destroy();
         end
@@ -47,10 +60,15 @@ function SetupAPIs()
         APIs.UIAPI.GetUI('GameplayFrame').Visible = true;
         local speedUI = APIs.UIAPI.GetUI('SpeedFrame');
 
+        APIs.CameraAPI.SetSaturation(0, 3);
+        APIs.CameraAPI.SetBrightness(0, 3);
+
         -- CAR PHYSICS
         local speedLimits = Vector2.new(50,150);
 
-        local physicsDestructor;
+        local physicsDestructor, carsDestructor;
+        local connection1, connection2;
+
         local spawnerConnections = {};
         local laneModels = Client.Assets.Scenes.Gameplay.Spawner:GetChildren();
         local carsDataset = {};
@@ -113,9 +131,13 @@ function SetupAPIs()
             for i,v in pairs(spawnerConnections) do
                 v:Disconnect();
             end
+            physicsDestructor = nil;
+        end
+        carsDestructor = function()
             for i,v in pairs(carsDataset) do
                 destroyCar(i);
             end
+            carsDestructor = nil;
         end
         -- CAR PHYSICS
 
@@ -153,6 +175,12 @@ function SetupAPIs()
                             local x = math.random();
                             if x < 0.1 then
                                 print('Chase Mechanic')
+                                connection1:Disconnect(); connection1 = nil;
+                                connection2:Disconnect(); connection2 = nil;
+                                physicsDestructor();
+                                APIs.CameraAPI.SetSaturation(-1);
+                                APIs.CameraAPI.SetBrightness(-1, 3)
+                                task.wait(3);
                                 CurrentAPI.GoToChase();
                             else
                                 print('Interrogation Mechanic')
@@ -169,7 +197,7 @@ function SetupAPIs()
 
         uis.MouseBehavior = Enum.MouseBehavior.LockCenter;
         uis.MouseIconEnabled = false;
-        local connection1 = uis.InputChanged:Connect(function(input, gameProcessedEvent) -- Checking for user input
+        connection1 = uis.InputChanged:Connect(function(input, gameProcessedEvent) -- Checking for user input
             if gameProcessedEvent then return; end
             if input.UserInputType == Enum.UserInputType.MouseMovement then     -- https://create.roblox.com/docs/reference/engine/enums/UserInputType
                 local delta = input.Delta * mouseSensitivity / 3 / zoomValue;   -- Input.Delta (How much the mouse has moved)
@@ -184,7 +212,7 @@ function SetupAPIs()
                 APIs.CameraAPI.SetFOV(70 * (1/zoomValue), 0.5);
             end
         end)
-        local connection2 = uis.InputBegan:Connect(function(input, gameProcessedEvent) -- Checking for user input
+        connection2 = uis.InputBegan:Connect(function(input, gameProcessedEvent) -- Checking for user input
             if gameProcessedEvent then return; end
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 if input.KeyCode == Enum.KeyCode.Q then
@@ -201,9 +229,10 @@ function SetupAPIs()
             APIs.UIAPI.GetUI('GameplayFrame').Visible = false;
             speedUI.Text = '0 km/h';
 
-            physicsDestructor();
-            connection1:Disconnect();
-            connection2:Disconnect();
+            if physicsDestructor then physicsDestructor(); end
+            if carsDestructor then carsDestructor(); end
+            if connection1 then connection1:Disconnect(); end
+            if connection2 then connection2:Disconnect(); end
             scene:Destroy();
             uis.MouseBehavior = Enum.MouseBehavior.Default;
             uis.MouseIconEnabled = true;
@@ -216,13 +245,34 @@ function SetupAPIs()
     end
     CurrentAPI.GoToChase = function()
         CurrentAPI.DestroyCurrentGameplay();
-        
-        local scene = APIs.CameraAPI.CreateScene(function(t)
-            return Client.Assets.Scenes.Chase.PoliceCar.CameraOffset.CFrame;
-        end)
 
         local carsDataset = {};
-        local destroyCar = function()
+        local checkCollision = function(car1, car2)
+            local origin1, size1 = car1:GetBoundingBox(); origin1 = origin1.Position; size1 = size1 * 0.9
+            local origin2, size2 = car2:GetBoundingBox(); origin2 = origin2.Position; size2 = size2 * 0.9
+
+            local rect1_left = origin1.X - size1.X/2;
+            local rect1_right = origin1.X + size1.X/2;
+            local rect2_left = origin2.X - size2.X/2;
+            local rect2_right = origin2.X + size2.X/2;
+            
+            if rect1_right < rect2_left or rect1_left > rect2_right then
+                return false -- No horizontal overlap
+            end
+            
+            -- Check for vertical overlap
+            local rect1_top = origin1.Z - size1.Z/2;
+            local rect1_bottom = origin1.Z + size1.Z/2;
+            local rect2_top = origin2.Z - size2.Z/2;
+            local rect2_bottom = origin2.Z + size2.Z/2;
+            
+            if rect1_bottom < rect2_top or rect1_top > rect2_bottom then
+                return false -- No vertical overlap
+            end
+            
+            return true -- Collision detected
+        end
+        local destroyCar = function(carIndex)
             local data = carsDataset[carIndex];     -- Get data at index carIndex
             if data._simulation then
                 data._simulation:Disconnect();          -- Disconnect event
@@ -230,14 +280,16 @@ function SetupAPIs()
             data.Model:Destroy();                   -- :Destroy() is necessary, memory leaks can occur without it
             carsDataset[carIndex] = nil;            -- Remove value at index carIndex. Because of #carsDataset, the next spawnCar call will fill the spot 
         end
-        local spawnCar = function(rootModel, speed)
+        local spawnCar = function(rootModel, speed, alpha, collision)
+            collision = collision or false;
             speed = speed or 0;
+            alpha = alpha or 0;
 
             local carModel = APIs.CarAPI.CreateCar();
             carModel.Parent = rootModel;
-            carModel:PivotTo(rootModel.StartSpawn.CFrame);          -- Sets position and orientation of Car to StartSpawns CFrame
             local moveVec = (rootModel.EndSpawn.Position - rootModel.StartSpawn.Position).Unit; -- Creates a Unit vector representing the direction
             local distance = (rootModel.EndSpawn.Position - rootModel.StartSpawn.Position).Magnitude;
+            carModel:PivotTo(rootModel.StartSpawn.CFrame*CFrame.new(0, 0, -distance * alpha));   -- Sets position and orientation of Car to StartSpawns CFrame
 
             local index = #carsDataset + 1; -- Used to store at index
             local connection;
@@ -253,22 +305,127 @@ function SetupAPIs()
                 MoveVector = moveVec;           -- Unit Direction vector (where it moves to)
                 Speed = speed;                  -- Speed (studs/second)
                 Distance = distance;            -- Distance (studs)
+                CanCollide = collision;
 
                 _simulation = connection;       -- RBXScriptConnection to Heartbeat event. Used to simulate car moving forward
             }
             return index;
         end
 
-        local physicsEmulator = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
+        do  -- Spawning cars into current lane
+            local leftLane = Client.Assets.Scenes.Chase.Spawner['1'];   -- Left lane asset
+            local rightLane = Client.Assets.Scenes.Chase.Spawner['2'];  -- Right lane asset
+            local cellSize = 35;
+            local cellCount = math.ceil((leftLane.EndSpawn.Position - leftLane.StartSpawn.Position).Magnitude/cellSize);
+
+            local lastAction = 'Pass';  -- Generating cars on the current lane
+            local weightedMax = 3;
+            local leftCount = weightedMax;
+            local rightCount = weightedMax;
+            local passCount = weightedMax;
+            for i = 1,cellCount do
+                local p = {Left = 2*leftCount, Right = 2*rightCount, Pass = 0.5*passCount};              -- Weights of Probability for generating a Left or Right car, also for passing the current cell
+                local pSum = 0;
+                if lastAction == 'Left' then p.Right = nil; end
+                if lastAction == 'Right' then p.Left = nil; end
+                if lastAction == 'Pass' then p.Pass = nil; end
+                for i,v in pairs(p) do pSum += v; end
+
+                local chance = math.random()*pSum;
+                local action;
+                for i,v in pairs(p) do
+                    if v > chance then
+                        action = i;
+                        break;
+                    else
+                        chance -= v;
+                    end
+                end
+
+                lastAction = action;
+                if action == 'Left' then
+                    spawnCar(leftLane, 0, i/cellCount);
+                    leftCount = math.max(leftCount - 1.5, 0);
+                    rightCount = math.min(rightCount + 1, weightedMax);
+                    passCount = math.min(passCount + 1, weightedMax);
+                elseif action == 'Right' then
+                    spawnCar(rightLane, 0, i/cellCount);
+                    leftCount = math.min(leftCount + 1, weightedMax);
+                    rightCount = math.max(rightCount - 1.5, 0);
+                    passCount = math.min(passCount + 1, weightedMax);
+                elseif action == 'Pass' then
+                    leftCount = math.min(leftCount + 1, weightedMax);
+                    rightCount = math.min(rightCount + 1, weightedMax);
+                    passCount = 0;
+                    continue;
+                else
+                    warn('UNKNOWN BEHAVIOR. UNKNOWN ACTION CHOSEN TO SPAWN VEHICLE')
+                end
+            end
+        end
+        do  -- Spawn cars into the oncoming lane TODO
             
+        end
+
+        local speed = 100;
+        local turnSpeed = 50;
+        local policeCar = Client.Assets.Scenes.Chase.PoliceCar; policeCar:PivotTo(Client.Assets.Scenes.Chase.Spawn.CFrame)
+        local ground = Client.Assets.Scenes.Chase.Road;
+        local limiter = {Min = Client.Assets.Scenes.Chase.XLimits.Min.Position.X, Max = Client.Assets.Scenes.Chase.XLimits.Max.Position.X, }
+
+        APIs.CameraAPI.SetDepthOfField((policeCar.CameraOffset.Position - policeCar.PrimaryPart.Position).Magnitude);
+        local scene = APIs.CameraAPI.CreateScene(function(t)
+            return policeCar.CameraOffset.CFrame;
+        end)
+
+        
+        APIs.CameraAPI.SetSaturation(0, 3);
+        APIs.CameraAPI.SetBrightness(0, 3);
+        task.wait(3);
+
+        local finishTime = tick() + 2048/speed;
+        local physicsEmulator;
+        physicsEmulator = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
+            local right = UserInputService:IsKeyDown(Enum.KeyCode.D);
+            local left = UserInputService:IsKeyDown(Enum.KeyCode.A);
+            local turnDirection = ((right and 1 or 0) + (left and -1 or 0));
+            local newCF = policeCar.PrimaryPart.CFrame*CFrame.new(turnDirection * turnSpeed * deltaTime, 0, -speed * deltaTime);
+            local delta = Vector3.new(math.clamp(newCF.Position.X, limiter.Min, limiter.Max) - newCF.Position.X, 0, 0);
+            newCF = newCF + delta;
+            policeCar:PivotTo(newCF);
+
+            ground:PivotTo(ground.PrimaryPart.CFrame*CFrame.new(0, 0, speed*deltaTime))
+            if tick() > finishTime then
+                CurrentAPI.GoToGameplay();
+            end
+
+            local collision = false;
+            for i,v in pairs(carsDataset) do
+                if checkCollision(v.Model, policeCar.Model) then
+                    collision = true;
+                    physicsEmulator:Disconnect();
+                    physicsEmulator = nil;
+                    break;
+                end
+            end
+            if collision then
+                APIs.CameraAPI.SetSaturation(-1);
+                APIs.CameraAPI.SetBrightness(-1, 3);
+                task.wait(3);
+                CurrentAPI.GoToIntro();
+            end
         end)
         local physicsDestructor = function()
-            physicsEmulator:Disconnect();
+            if physicsEmulator then physicsEmulator:Disconnect(); physicsEmulator = nil; end
+            for i,v in pairs(carsDataset) do
+                destroyCar(i);
+            end
         end
 
         Storage.CurrentDestructor = function()
             APIs.CameraAPI.SetFOV(70, 0);
 
+            ground = Storage.ChaseOrigin;
             physicsDestructor();
             scene:Destroy();
         end

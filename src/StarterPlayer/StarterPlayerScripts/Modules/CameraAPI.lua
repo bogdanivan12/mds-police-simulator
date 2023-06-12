@@ -34,6 +34,25 @@ function SetupAPIs()
         return scene;
     end
 
+    Storage.ColorCorrection = Instance.new('ColorCorrectionEffect')
+    Storage.ColorCorrection.Parent = Client.Camera;
+    CurrentAPI.SetSaturation = function(value, t)
+        t = t or 0; -- Default value in case t is nil
+        game:GetService('TweenService'):Create(
+            Storage.ColorCorrection,
+            TweenInfo.new(t, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0),
+            {Saturation = value}
+        ):Play();
+    end
+    CurrentAPI.SetBrightness = function(value, t)
+        t = t or 0; -- Default value in case t is nil
+        game:GetService('TweenService'):Create(
+            Storage.ColorCorrection,
+            TweenInfo.new(t, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0),
+            {Brightness = value}
+        ):Play();
+    end
+
     Storage.Blur = Instance.new('BlurEffect');
     Storage.Blur.Parent = Client.Camera;
     Storage.Blur.Size = 0;
