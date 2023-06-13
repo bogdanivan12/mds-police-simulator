@@ -6,6 +6,8 @@ local APIs = Client.API;
 local CurrentAPI = APIs[API_NAME];
 local Storage = {
     CurrentDestructor = nil;
+    CurrentPoints = 0;
+    ChaseChance = 1;
 
     SpeedLimit = 100;
     ChaseOrigin = Client.Assets.Scenes.Chase.Road.PrimaryPart.CFrame;
@@ -21,7 +23,7 @@ function SetupAPIs()
     CurrentAPI.GoToIntro = function()
         CurrentAPI.DestroyCurrentGameplay();
 
-        
+        Storage.CurrentPoints = 0;
         APIs.CameraAPI.SetSaturation(0, 0);
         APIs.CameraAPI.SetBrightness(0, 3);
         APIs.UIAPI.GetUI('IntroFrame').Visible = true;
@@ -60,6 +62,8 @@ function SetupAPIs()
         CurrentAPI.DestroyCurrentGameplay();
         APIs.UIAPI.GetUI('GameplayFrame').Visible = true;
         local speedUI = APIs.UIAPI.GetUI('SpeedFrame');
+        local pointsUI = APIs.UIAPI.GetUI('PointsFrame')
+        pointsUI.Text = 'Points: '.. tostring(Storage.CurrentPoints);
 
         APIs.CameraAPI.SetSaturation(0, 3);
         APIs.CameraAPI.SetBrightness(0, 3);
@@ -103,6 +107,7 @@ function SetupAPIs()
                 Speed = speed;                  -- Speed (studs/second)
                 Distance = distance;            -- Distance (studs)
                 FinishTime = timeTillFinish;    -- Future time when simulation will finish (seconds, high-precision)
+                Clicked = false;
 
                 _simulation = connection;       -- RBXScriptConnection to Heartbeat event. Used to simulate car moving forward
             }
@@ -169,16 +174,27 @@ function SetupAPIs()
             local raycastResult = workspace:Raycast(cf.Position, cf.LookVector*raycastDistance);  -- https://create.roblox.com/docs/mechanics/raycasting
 
             speedUI.Text = '0 km/h';
+            speedUI.TextColor3 = Color3.fromRGB(255, 255, 255);
             clickcallback = function() end  -- Overwrite the clickcallback function to static act
             if raycastResult then
                 raycastDistance = (cf.Position - raycastResult.Position).Magnitude;
                 for i,v in pairs(carsDataset) do
                     if raycastResult.Instance:IsDescendantOf(v.Model) then
-                        speedUI.Text = tostring(math.floor(v.Speed)) ..' km/h'; -- Adapt UI to the current speed
+                        local speed = v.Speed;
+                        speedUI.Text = tostring(math.floor(speed)) ..' km/h'; -- Adapt UI to the current speed
+                        if v.Clicked == true then
+                            speedUI.TextColor3 = Color3.fromRGB(255, 170, 0);
+                        elseif speed>= Storage.SpeedLimit then
+                            speedUI.TextColor3 = Color3.fromRGB(255, 0, 0);
+                        end
+                        
 
                         clickcallback = function()  -- Overwrite the clickcallback function to act
+                            if v.Clicked == true then return; end
+                            v.Clicked = true;
+
                             local x = math.random();
-                            if x < 0.1 then
+                            if x < Storage.ChaseChance then
                                 print('Chase Mechanic')
                                 connection1:Disconnect(); connection1 = nil;
                                 connection2:Disconnect(); connection2 = nil;
@@ -186,10 +202,15 @@ function SetupAPIs()
                                 APIs.CameraAPI.SetSaturation(-1);
                                 APIs.CameraAPI.SetBrightness(-1, 3)
                                 task.wait(3);
-                                CurrentAPI.GoToChase();
+                                CurrentAPI.GoToChase(v.Model:Clone());
                             else
+                                if speed >= Storage.SpeedLimit then
+                                    Storage.CurrentPoints += 50;        -- Award 50 points and update the UI
+                                else
+                                    Storage.CurrentPoints -= 50;        -- Penalty of 50 points and update the UI
+                                end
+                                pointsUI.Text = 'Points: '.. tostring(Storage.CurrentPoints);    -- Points UI update
                                 print('Interrogation Mechanic')
-                                --CurrentAPI.GoToInterrogation();
                             end
                         end
                         break;
@@ -233,6 +254,8 @@ function SetupAPIs()
             APIs.CameraAPI.SetFOV(70, 0);
             APIs.UIAPI.GetUI('GameplayFrame').Visible = false;
             speedUI.Text = '0 km/h';
+            speedUI.TextColor3 = Color3.fromRGB(255, 255, 255);
+            pointsUI.Text = 'Points: 0'
 
             if physicsDestructor then physicsDestructor(); end
             if carsDestructor then carsDestructor(); end
@@ -248,9 +271,10 @@ function SetupAPIs()
         CurrentAPI.DestroyCurrentGameplay();
 
     end
-    CurrentAPI.GoToChase = function()
+    CurrentAPI.GoToChase = function(chasingCar)
         CurrentAPI.DestroyCurrentGameplay();
 
+        local chasingPath = {};
         local carsDataset = {};
         local checkCollision = function(car1, car2)
             local origin1, size1 = car1:GetBoundingBox(); origin1 = origin1.Position; size1 = size1 * 0.9
@@ -349,16 +373,28 @@ function SetupAPIs()
 
                 lastAction = action;
                 if action == 'Left' then
+                    local distance = (rightLane.EndSpawn.Position - rightLane.StartSpawn.Position).Magnitude;
+                    local newPoint = rightLane.StartSpawn.CFrame*CFrame.new(0, 0, -distance * i/cellCount)
+                    chasingPath[#chasingPath + 1] = newPoint;
+
                     spawnCar(leftLane, 0, i/cellCount);
                     leftCount = math.max(leftCount - 1.5, 0);
                     rightCount = math.min(rightCount + 1, weightedMax);
                     passCount = math.min(passCount + 1, weightedMax);
                 elseif action == 'Right' then
+                    local distance = (leftLane.EndSpawn.Position - leftLane.StartSpawn.Position).Magnitude;
+                    local newPoint = leftLane.StartSpawn.CFrame*CFrame.new(0, 0, -distance * i/cellCount)
+                    chasingPath[#chasingPath + 1] = newPoint;
+
                     spawnCar(rightLane, 0, i/cellCount);
                     leftCount = math.min(leftCount + 1, weightedMax);
                     rightCount = math.max(rightCount - 1.5, 0);
                     passCount = math.min(passCount + 1, weightedMax);
                 elseif action == 'Pass' then
+                    local distance = (leftLane.EndSpawn.Position - leftLane.StartSpawn.Position).Magnitude;
+                    local newPoint = leftLane.StartSpawn.CFrame*CFrame.new(0, 0, -distance * i/cellCount)
+                    chasingPath[#chasingPath + 1] = newPoint;
+
                     leftCount = math.min(leftCount + 1, weightedMax);
                     rightCount = math.min(rightCount + 1, weightedMax);
                     passCount = 0;
@@ -367,6 +403,9 @@ function SetupAPIs()
                     warn('UNKNOWN BEHAVIOR. UNKNOWN ACTION CHOSEN TO SPAWN VEHICLE')
                 end
             end
+
+            local newPoint = chasingPath[#chasingPath] * CFrame.new(0, 0, -10000)
+            chasingPath[#chasingPath + 1] = newPoint;
         end
         do  -- Spawn cars into the oncoming lane TODO
             
@@ -376,7 +415,9 @@ function SetupAPIs()
         local turnSpeed = 50;
         local policeCar = Client.Assets.Scenes.Chase.PoliceCar; policeCar:PivotTo(Client.Assets.Scenes.Chase.Spawn.CFrame)
         local ground = Client.Assets.Scenes.Chase.Road;
-        local limiter = {Min = Client.Assets.Scenes.Chase.XLimits.Min.Position.X, Max = Client.Assets.Scenes.Chase.XLimits.Max.Position.X, }
+        local limiter = {Min = Client.Assets.Scenes.Chase.XLimits.Min.Position.X, Max = Client.Assets.Scenes.Chase.XLimits.Max.Position.X}
+        chasingCar.Parent = Client.Assets.Scenes.Chase;
+        chasingCar:PivotTo(chasingPath[1])
 
         APIs.CameraAPI.SetDepthOfField((policeCar.CameraOffset.Position - policeCar.PrimaryPart.Position).Magnitude);
         local scene = APIs.CameraAPI.CreateScene(function(t)
@@ -388,9 +429,15 @@ function SetupAPIs()
         APIs.CameraAPI.SetBrightness(0, 3);
         task.wait(3);
 
-        local finishTime = tick() + 2048/speed;
+        local finishTime = 2048/speed;
+        local currentTime = 0;
+        local timeScale = 0;
         local physicsEmulator;
         physicsEmulator = game:GetService('RunService').Heartbeat:Connect(function(deltaTime)
+            timeScale = math.min(timeScale + deltaTime * 1/3, 1)
+            deltaTime = deltaTime * timeScale;
+            currentTime += deltaTime;
+
             local right = UserInputService:IsKeyDown(Enum.KeyCode.D);
             local left = UserInputService:IsKeyDown(Enum.KeyCode.A);
             local turnDirection = ((right and 1 or 0) + (left and -1 or 0));
@@ -399,14 +446,35 @@ function SetupAPIs()
             newCF = newCF + delta;
             policeCar:PivotTo(newCF);
 
+            local sign = math.floor(currentTime / 0.25) % 2;
+            policeCar.Lights.Left.Material = (sign == 0) and Enum.Material.Neon or Enum.Material.SmoothPlastic;
+            policeCar.Lights.Right.Material = (sign == 0) and Enum.Material.SmoothPlastic or Enum.Material.Neon;
+
+            local totalDist = speed * currentTime;
+            local deltaDist = 0;
+            local pointA, pointB, alpha;
+            for i = 1, #chasingPath - 1 do
+                local a = chasingPath[i];
+                local b = chasingPath[i + 1]
+                local currentDist = math.abs(a.Position.Z - b.Position.Z);
+                deltaDist += currentDist;
+                if deltaDist >= totalDist then
+                    alpha = 1 - (deltaDist - totalDist)/currentDist;
+                    pointA = a; pointB = b;
+                    break;
+                end
+            end
+            chasingCar:PivotTo(pointA:Lerp(pointB, alpha));
+
             ground:PivotTo(ground.PrimaryPart.CFrame*CFrame.new(0, 0, speed*deltaTime))
-            if tick() > finishTime then
+            if currentTime > finishTime then
                 physicsEmulator:Disconnect();
                 physicsEmulator = nil;
                 
                 APIs.CameraAPI.SetSaturation(-1);
                 APIs.CameraAPI.SetBrightness(-1, 3);
                 task.wait(3);
+                Storage.CurrentPoints += 200;
                 CurrentAPI.GoToGameplay();
             end
 
@@ -434,6 +502,7 @@ function SetupAPIs()
         end
 
         Storage.CurrentDestructor = function()
+            chasingCar:Destroy();
             APIs.CameraAPI.SetFOV(70, 0);
 
             ground:PivotTo(Storage.ChaseOrigin)
