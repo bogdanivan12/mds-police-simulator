@@ -7,7 +7,7 @@ local CurrentAPI = APIs[API_NAME];
 local Storage = {
     CurrentDestructor = nil;
     CurrentPoints = 0;
-    ChaseChance = 1;
+    ChaseChance = 0.1;
 
     SpeedLimit = 100;
     ChaseOrigin = Client.Assets.Scenes.Chase.Road.PrimaryPart.CFrame;
