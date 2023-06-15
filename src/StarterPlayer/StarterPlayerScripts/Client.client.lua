@@ -5,14 +5,15 @@ Client.Camera = game.Workspace.CurrentCamera;                   -- Camera
 Client.Mouse = Client.Player:GetMouse();                        -- Mouse
 Client.Assets = game.ReplicatedStorage:WaitForChild('Assets');  -- Game assets
 Client.UI = Client.Assets:WaitForChild('UI');                   -- Interface
-Client.UI.Parent = Client.Player.PlayerGui;                         -- Reparenting, Players.CharacterAutoloads = false, UI won't load by itself
+Client.UI.Parent = Client.Player.PlayerGui;                     -- Reparenting, Players.CharacterAutoloads = false, UI won't load by itself
 Client.API = {};                                                -- Container of function overloads
 
 local loadOrder = { -- Loading each module one by one
     'UIAPI',        -- Must be first    UI Controller
     'CameraAPI',    -- Unknown          Camera Controller
     'CarAPI',       -- Unknow           Car Controller, generates car models on command
-    'GameplayAPI'   -- Should be last   Gameplay Controller (Starts the game)
+    'GameplayAPI',  -- Should be last   Gameplay Controller (Starts the game)
+    'AutoTestAPI'   -- Should be last   Automatic memory testing to check for memory leaks
 }
 
 function StartUp()  -- int main()
